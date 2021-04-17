@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: Test Service
+  version: 1.0.0
+servers:
+  - url: "http://localhost:8080"
+
+paths:
+  /hello/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      responses:
+        "200":
+          description: ProjectToken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Greeting"
+  /count/{number}/{currency}:
+    parameters:
+      - name: number
+        in: path
+        required: true
+        schema:
+          type: number
+      - name: currency
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      responses:
+        "200":
+          description: Greeting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Greeting"
+  /security:
+    get:
+      security:
+        - key: []
+      responses:
+        "200":
+          description: Greeting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Greeting"
+
+components:
+  schemas:
+    Greeting:
+      type: object
+      properties:
+        greeting:
+          type: string
+      required:
+        - greeting
+  securitySchemes:
+    key:
+      type: apiKey
+      description: API key to authorize requests.
+      name: appid
+      in: query
