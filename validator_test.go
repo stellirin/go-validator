@@ -22,7 +22,7 @@ func newEcho(config ...validator.Config) *echo.Echo {
 	e.GET("/hello/:name", func(ctx echo.Context) error {
 		name := ctx.Param("name")
 		return ctx.String(http.StatusOK, fmt.Sprintf(`{"greeting": "Hello, %s!"}`, name))
-	})
+	}).Name = "/hello/{name}"
 
 	e.GET("/count/:number/:currency", func(ctx echo.Context) error {
 		number := ctx.Param("number")

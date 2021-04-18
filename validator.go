@@ -23,18 +23,16 @@ func init() {
 	}
 }
 
-// Initialize is a convenience function to populate the validator path cache before starting the server.
-func Initialize(e *echo.Echo, doc *openapi3.Swagger) error {
+// Initialize populates the validator path cache before starting the server.
+//
+// You must set the route Name to the OpenAPI path, e.g.:
+//	e.GET("/hello/:name", helloHandler).Name = "/hello/{name}"
+func Initialize(e *echo.Echo, doc *openapi3.Swagger) {
 	for _, r := range e.Routes() {
-		ctx := e.NewContext(nil, nil)
-		e.Router().Find(r.Method, r.Path, ctx)
-
-		_, err := getRoute(r.Path, ctx.ParamNames(), doc)
-		if err != nil {
-			return err
+		if item := doc.Paths[r.Name]; item != nil {
+			pathItems.put(r.Path, item)
 		}
 	}
-	return nil
 }
 
 // New creates a new OpenAPI validator for Echo.
@@ -49,23 +47,16 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 				return next(ctx)
 			}
 
-			path := ctx.Path()
 			req := ctx.Request()
 
-			// get the pathItem from the cache
-			// check the doc anyway, maybe we didn't run validator.Initialize()
-			pathItem := pathItems.get(path)
+			pathItem := getRoute(ctx, doc)
 			if pathItem == nil {
-				var err error
-				pathItem, err = getRoute(path, ctx.ParamNames(), doc)
-				if err != nil {
-					return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-				}
+				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("path not valid: %s", req.URL.Path))
 			}
 
 			operation := pathItem.Operations()[req.Method]
 			if operation == nil {
-				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("method '%s' not found on path '%s'", req.Method, req.URL.Path))
+				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("method '%s' not valid on path '%s'", req.Method, req.URL.Path))
 			}
 
 			paramNames := ctx.ParamNames()
@@ -78,7 +69,7 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 
 			queryParams := ctx.QueryParams()
 
-			validationInput := &openapi3filter.RequestValidationInput{
+			input := &openapi3filter.RequestValidationInput{
 				Request:     req,
 				PathParams:  pathParams,
 				QueryParams: queryParams,
@@ -93,7 +84,7 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 				ParamDecoder: cfg.ParamDecoder,
 			}
 
-			if err := openapi3filter.ValidateRequest(req.Context(), validationInput); err != nil {
+			if err := openapi3filter.ValidateRequest(req.Context(), input); err != nil {
 				switch err.(type) {
 				case *openapi3filter.RequestError:
 					return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -109,33 +100,36 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 	}
 }
 
-func getRoute(path string, paramNames []string, doc *openapi3.Swagger) (*openapi3.PathItem, error) {
-	// We copy because a slice is a pointer,
-	// if we sort directly then ctx.ParamNames() and ctx.ParamValues() fall out of sync!
-	paramCopy := make([]string, len(paramNames))
-	copy(paramCopy, paramNames)
+func getRoute(ctx echo.Context, doc *openapi3.Swagger) *openapi3.PathItem {
+	// Path is in the cache?
+	if pathItem := pathItems.get(ctx.Path()); pathItem != nil {
+		return pathItem
+	}
+
+	// don't sort ctx.ParamNames() directly else ctx.ParamNames() and ctx.ParamValues() fall out of sync!
+	paramNames := make([]string, len(ctx.ParamNames()))
+	copy(paramNames, ctx.ParamNames())
 
 	// Sort by longest to shortest to prevent substring replacements
-	if len(paramCopy) > 1 {
-		sort.Slice(paramCopy, func(i, j int) bool {
-			return len(paramCopy[i]) > len(paramCopy[j])
+	if len(paramNames) > 1 {
+		sort.Slice(paramNames, func(i, j int) bool {
+			return len(paramNames[i]) > len(paramNames[j])
 		})
 	}
 
-	apiPath := path
-	for _, name := range paramCopy {
-		apiPath = strings.Replace(apiPath, ":"+name, "{"+name+"}", -1)
+	apiPath := ctx.Path()
+	for _, name := range paramNames {
+		// OpenAPI parameters must appear only once in the path
+		apiPath = strings.Replace(apiPath, ":"+name, "{"+name+"}", 1)
 	}
 
 	item, exists := doc.Paths[apiPath]
-	if !exists {
-		return nil, fmt.Errorf("path not used in API specification: %s", path)
+	if exists {
+		// path is good, cache it!
+		pathItems.put(ctx.Path(), item)
 	}
 
-	// path is good, cache the pathItem
-	pathItems.put(path, item)
-
-	return item, nil
+	return item
 }
 
 type pathMap struct {
