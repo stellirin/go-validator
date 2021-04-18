@@ -36,11 +36,28 @@ func newEcho(config ...validator.Config) *echo.Echo {
 		return ctx.String(http.StatusOK, `{"greeting": "Hello!"}`)
 	})
 
+	e.GET("/unknown", func(ctx echo.Context) error {
+		return ctx.String(http.StatusTeapot, `{"greeting": "WTF!"}`)
+	})
+
+	validator.Initialize(e, doc)
+
 	return e
 }
 
 func Test_Echo(t *testing.T) {
 	e := newEcho()
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/hello/world", nil)
+	res := httptest.NewRecorder()
+	e.ServeHTTP(res, req)
+	require.Equal(t, http.StatusOK, res.Code)
+}
+
+func Test_Echo_Skip(t *testing.T) {
+	e := newEcho(validator.Config{
+		Skipper: func(echo.Context) bool { return true },
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/hello/world", nil)
 	res := httptest.NewRecorder()
