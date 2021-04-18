@@ -29,13 +29,10 @@ func Initialize(e *echo.Echo, doc *openapi3.Swagger) error {
 		ctx := e.NewContext(nil, nil)
 		e.Router().Find(r.Method, r.Path, ctx)
 
-		pathItem, exists := getRoute(r.Path, ctx.ParamNames(), doc)
-		if !exists {
-			return fmt.Errorf("path '%s' not found", r.Path)
+		_, err := getRoute(r.Path, ctx.ParamNames(), doc)
+		if err != nil {
+			return err
 		}
-
-		// path is good, cache the pathItem
-		pathItems.put(r.Path, pathItem)
 	}
 	return nil
 }
@@ -57,15 +54,13 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 
 			// get the pathItem from the cache
 			// check the doc anyway, maybe we didn't run validator.Initialize()
-			pathItem, exists := pathItems.get(path)
-			if !exists {
-				pathItem, exists = getRoute(path, ctx.ParamNames(), doc)
-				if !exists {
-					return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("path '%s' not found", req.URL.Path))
+			pathItem := pathItems.get(path)
+			if pathItem == nil {
+				var err error
+				pathItem, err = getRoute(path, ctx.ParamNames(), doc)
+				if err != nil {
+					return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 				}
-
-				// path is good, cache the pathItem
-				pathItems.put(path, pathItem)
 			}
 
 			operation := pathItem.Operations()[req.Method]
@@ -114,7 +109,7 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 	}
 }
 
-func getRoute(path string, paramNames []string, doc *openapi3.Swagger) (*openapi3.PathItem, bool) {
+func getRoute(path string, paramNames []string, doc *openapi3.Swagger) (*openapi3.PathItem, error) {
 	// We copy because a slice is a pointer,
 	// if we sort directly then ctx.ParamNames() and ctx.ParamValues() fall out of sync!
 	paramCopy := make([]string, len(paramNames))
@@ -133,7 +128,14 @@ func getRoute(path string, paramNames []string, doc *openapi3.Swagger) (*openapi
 	}
 
 	item, exists := doc.Paths[apiPath]
-	return item, exists
+	if !exists {
+		return nil, fmt.Errorf("path not used in API specification: %s", path)
+	}
+
+	// path is good, cache the pathItem
+	pathItems.put(path, item)
+
+	return item, nil
 }
 
 type pathMap struct {
@@ -148,10 +150,9 @@ func (pm *pathMap) put(key string, value *openapi3.PathItem) {
 	pm.paths[key] = value
 }
 
-func (pm *pathMap) get(key string) (*openapi3.PathItem, bool) {
+func (pm *pathMap) get(key string) *openapi3.PathItem {
 	pm.mutex.RLock()
 	defer pm.mutex.RUnlock()
 
-	path, exists := pm.paths[key]
-	return path, exists
+	return pm.paths[key]
 }
