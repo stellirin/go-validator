@@ -13,11 +13,17 @@ go get -u czechia.dev/validator
 
 ## 📝 Usage
 
-Other validators use an OpenAPI router from the `kin-openapi` package within the validator itself. This means a request is 'routed' twice, once by Echo, and the again by the validator.
+Other [OpenAPI validators](https://github.com/deepmap/oapi-codegen/blob/v1.6.0/pkg/middleware/oapi_validate.go#L70) use a router from the [`kin-openapi`](https://github.com/getkin/kin-openapi) package within the validator itself. This means a request is 'routed' twice, once by Echo, and then again by the validator.
 
-*This* validator takes advantage of the fact that Echo has already routed the request, and the handler path, parameters, etc. are all available in the Echo context. We simply look for the corresponding path in the OpenAPI specification and validate it directly.
+`czechia.cz/validator` takes advantage of the fact that Echo has already routed valid requests, and the handler path, parameters, etc. are all available in the Echo context. We simply look for the corresponding path in the OpenAPI specification and validate against it directly.
 
-If the Echo handler path is `/hello/:name` then we look for the `/hello/{name}` OpenAPI path. This means your Echo parameters must have the same names as the OpenAPI parameters.
+The validator maintains a cached list of Echo Routes and their associated OpenAPI paths to speed up validation. You can prepopulate the path cache by setting the Echo Route Name as the OpenAPI path and call the `validator.Initialize()` function.
+
+If the OpenAPI path is not found in the cache at runtime then the validator searches for the path according to the route's parameter names. This means your Echo parameters must have the same names as the OpenAPI parameters.
+
+Example: if the Echo handler path is `/hello/:name` then we look for the `/hello/{name}` OpenAPI path.
+
+Ultimtely, if no OpenAPI path is found then the response is always an error.
 
 ## 👀 Example
 
@@ -39,19 +45,10 @@ func main() {
 	e.Use(validator.New(doc))
 
 	e.GET("/hello/:name", func(ctx echo.Context) error {
-		name := ctx.Param("name")
-		return ctx.String(http.StatusOK, fmt.Sprintf(`{"greeting": "Hello, %s!"}`, name))
-	})
+		return ctx.String(http.StatusOK, fmt.Sprintf(`{"greeting": "Hello, %s!"}`, ctx.Param("name")))
+	}).Name = "/hello/{name}"
 
-	e.GET("/count/:number/:currency", func(ctx echo.Context) error {
-		number := ctx.Param("number")
-		currency := ctx.Param("currency")
-		return ctx.String(http.StatusOK, fmt.Sprintf(`{"greeting": "You got %s%s!"}`, number, currency))
-	})
-
-	e.GET("/security", func(ctx echo.Context) error {
-		return ctx.String(http.StatusOK, `{"greeting": "Hello!"}`)
-	})
+	validator.Initialize(e, doc)
 
 	e.Start(":8080")
 }
