@@ -92,10 +92,19 @@ func Test_Echo_Bad_Method(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, res.Code)
 }
 
-func Test_Echo_Bad_Params(t *testing.T) {
+func Test_Echo_Bad_Params_Parse(t *testing.T) {
 	e := newEcho()
 
-	req := httptest.NewRequest(http.MethodGet, "http://example.com/count/USD/100", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/count/USD/USD", nil)
+	res := httptest.NewRecorder()
+	e.ServeHTTP(res, req)
+	require.Equal(t, http.StatusBadRequest, res.Code)
+}
+
+func Test_Echo_Bad_Params_Schema(t *testing.T) {
+	e := newEcho()
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/count/100/$", nil)
 	res := httptest.NewRecorder()
 	e.ServeHTTP(res, req)
 	require.Equal(t, http.StatusBadRequest, res.Code)

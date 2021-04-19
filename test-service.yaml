@@ -28,11 +28,15 @@ paths:
         required: true
         schema:
           type: number
+          minimum: 0
+          maximum: 100
       - name: currency
         in: path
         required: true
         schema:
           type: string
+          minLength: 3
+          maxLength: 3
     get:
       responses:
         "200":

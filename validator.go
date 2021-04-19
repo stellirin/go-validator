@@ -27,16 +27,16 @@ func init() {
 //
 // You must set the route Name to the OpenAPI path, e.g.:
 //	e.GET("/hello/:name", helloHandler).Name = "/hello/{name}"
-func Initialize(e *echo.Echo, doc *openapi3.Swagger) {
+func Initialize(e *echo.Echo, s *openapi3.Swagger) {
 	for _, r := range e.Routes() {
-		if item := doc.Paths[r.Name]; item != nil {
+		if item := s.Paths[r.Name]; item != nil {
 			pathItems.put(r.Path, item)
 		}
 	}
 }
 
 // New creates a new OpenAPI validator for Echo.
-func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
+func New(swagger *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 	// Set default config
 	cfg := setConfig(config)
 
@@ -49,7 +49,7 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 
 			req := ctx.Request()
 
-			pathItem := getRoute(ctx, doc)
+			pathItem := getRoute(ctx, swagger)
 			if pathItem == nil {
 				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("path not valid: %s", req.URL.Path))
 			}
@@ -74,7 +74,7 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 				PathParams:  pathParams,
 				QueryParams: queryParams,
 				Route: &routers.Route{
-					Swagger:   doc,
+					Swagger:   swagger,
 					Path:      req.URL.Path,
 					PathItem:  pathItem,
 					Method:    req.Method,
@@ -85,11 +85,30 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 			}
 
 			if err := openapi3filter.ValidateRequest(req.Context(), input); err != nil {
-				switch err.(type) {
+				switch validateErr := err.(type) {
 				case *openapi3filter.RequestError:
-					return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+					switch requestErr := validateErr.Err.(type) {
+					case *openapi3filter.ParseError:
+						return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf(
+							"cannot parse parameter '%s' in %s, got '%v' but %s",
+							validateErr.Parameter.Name,
+							validateErr.Parameter.In,
+							requestErr.Value,
+							requestErr.Reason,
+						))
+					case *openapi3.SchemaError:
+						return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf(
+							"cannot parse parameter '%s' in %s, got '%v' but %s",
+							validateErr.Parameter.Name,
+							validateErr.Parameter.In,
+							requestErr.Value,
+							requestErr.Reason,
+						))
+					default:
+						return echo.NewHTTPError(http.StatusBadRequest, validateErr.Err.Error())
+					}
 				case *openapi3filter.SecurityRequirementsError:
-					return echo.NewHTTPError(http.StatusForbidden, err.Error())
+					return echo.NewHTTPError(http.StatusForbidden, validateErr.Error())
 				default:
 					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 				}
@@ -100,7 +119,7 @@ func New(doc *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 	}
 }
 
-func getRoute(ctx echo.Context, doc *openapi3.Swagger) *openapi3.PathItem {
+func getRoute(ctx echo.Context, swagger *openapi3.Swagger) *openapi3.PathItem {
 	// Path is in the cache?
 	if pathItem := pathItems.get(ctx.Path()); pathItem != nil {
 		return pathItem
@@ -123,7 +142,7 @@ func getRoute(ctx echo.Context, doc *openapi3.Swagger) *openapi3.PathItem {
 		apiPath = strings.Replace(apiPath, ":"+name, "{"+name+"}", 1)
 	}
 
-	item, exists := doc.Paths[apiPath]
+	item, exists := swagger.Paths[apiPath]
 	if exists {
 		// path is good, cache it!
 		pathItems.put(ctx.Path(), item)
