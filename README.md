@@ -1,7 +1,8 @@
 # Validator: OpenAPI 3.x validation middleware for Echo
 
-[![codecov](https://codecov.io/gh/stellirin/go-validator/branch/main/graph/badge.svg?token=Q8irv4HHtY)](https://codecov.io/gh/stellirin/go-validator)
-[![Test Action Status](https://github.com/stellirin/go-validator/workflows/Go/badge.svg)](https://github.com/stellirin/go-validator/actions?query=workflow%3AGo)
+[![coverage](https://codecov.io/gh/stellirin/go-validator/branch/main/graph/badge.svg?token=Q8irv4HHtY)](https://codecov.io/gh/stellirin/go-validator)
+[![tests](https://github.com/stellirin/go-validator/workflows/Go/badge.svg)](https://github.com/stellirin/go-validator/actions?query=workflow%3AGo)
+[![report](https://goreportcard.com/badge/czechia.dev/validator)](https://goreportcard.com/report/czechia.dev/validator)
 
 A simple package to validate incoming requests against an OpenAPI specification for Echo.
 
