@@ -16,8 +16,8 @@ import (
 func newEcho(config ...validator.Config) *echo.Echo {
 	e := echo.New()
 
-	doc, _ := openapi3.NewSwaggerLoader().LoadSwaggerFromFile("test-service.yaml")
-	e.Use(validator.New(doc, config...))
+	spec, _ := openapi3.NewLoader().LoadFromFile("test-service.yaml")
+	e.Use(validator.New(spec, config...))
 
 	e.GET("/hello/:name", func(ctx echo.Context) error {
 		name := ctx.Param("name")
@@ -30,7 +30,7 @@ func newEcho(config ...validator.Config) *echo.Echo {
 		return ctx.String(http.StatusOK, fmt.Sprintf(`{"greeting": "You got %s%s!"}`, number, currency))
 	})
 
-	validator.Initialize(e, doc)
+	validator.Initialize(e, spec)
 
 	e.GET("/security", func(ctx echo.Context) error {
 		return ctx.String(http.StatusOK, `{"greeting": "Hello!"}`)
@@ -40,7 +40,7 @@ func newEcho(config ...validator.Config) *echo.Echo {
 		return ctx.String(http.StatusTeapot, `{"greeting": "WTF!"}`)
 	})
 
-	validator.Initialize(e, doc)
+	validator.Initialize(e, spec)
 
 	return e
 }

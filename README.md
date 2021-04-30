@@ -17,7 +17,7 @@ go get -u czechia.dev/validator
 
 Other [OpenAPI validators](https://github.com/deepmap/oapi-codegen/blob/v1.6.0/pkg/middleware/oapi_validate.go#L70) use a router from the [`kin-openapi`](https://github.com/getkin/kin-openapi) package within the validator itself. This means a request is 'routed' twice, once by Echo, and then again by the validator.
 
-`czechia.cz/validator` takes advantage of the fact that Echo has already routed valid requests, and the handler path, parameters, etc. are all available in the Echo context. We simply look for the corresponding path in the OpenAPI specification and validate against it directly.
+`czechia.cz/validator` takes advantage of the fact that Echo has already routed valid requests, so the handler path, parameters, etc. are all available in the Echo context. We simply look for the corresponding path in the OpenAPI specification and validate against it directly.
 
 The validator maintains a cached list of Echo Routes and their associated OpenAPI paths to speed up validation. You can prepopulate the path cache by setting the Echo Route Name as the OpenAPI path and call the `validator.Initialize()` function.
 
@@ -43,14 +43,14 @@ import (
 
 func main() {
 	e := echo.New()
-	doc, _ := openapi3.NewSwaggerLoader().LoadSwaggerFromFile("test-service.yaml")
-	e.Use(validator.New(doc))
+	spec, _ := openapi3.NewLoader().LoadFromFile("test-service.yaml")
+	e.Use(validator.New(spec))
 
 	e.GET("/hello/:name", func(ctx echo.Context) error {
 		return ctx.String(http.StatusOK, fmt.Sprintf(`{"greeting": "Hello, %s!"}`, ctx.Param("name")))
 	}).Name = "/hello/{name}"
 
-	validator.Initialize(e, doc)
+	validator.Initialize(e, spec)
 
 	e.Start(":8080")
 }

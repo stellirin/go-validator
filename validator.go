@@ -27,16 +27,16 @@ func init() {
 //
 // You must set the route Name to the OpenAPI path, e.g.:
 //	e.GET("/hello/:name", helloHandler).Name = "/hello/{name}"
-func Initialize(e *echo.Echo, s *openapi3.Swagger) {
+func Initialize(e *echo.Echo, spec *openapi3.T) {
 	for _, r := range e.Routes() {
-		if item := s.Paths[r.Name]; item != nil {
+		if item := spec.Paths[r.Name]; item != nil {
 			pathItems.put(r.Path, item)
 		}
 	}
 }
 
 // New creates a new OpenAPI validator for Echo.
-func New(swagger *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
+func New(spec *openapi3.T, config ...Config) echo.MiddlewareFunc {
 	// Set default config
 	cfg := setConfig(config)
 
@@ -49,13 +49,13 @@ func New(swagger *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 
 			req := ctx.Request()
 
-			pathItem := getRoute(ctx, swagger)
+			pathItem := getRoute(ctx, spec)
 			if pathItem == nil {
 				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("path not valid: %s", req.URL.Path))
 			}
 
-			operation := pathItem.Operations()[req.Method]
-			if operation == nil {
+			operation, ok := pathItem.Operations()[req.Method]
+			if !ok {
 				return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("method '%s' not valid on path '%s'", req.Method, req.URL.Path))
 			}
 
@@ -74,7 +74,7 @@ func New(swagger *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 				PathParams:  pathParams,
 				QueryParams: queryParams,
 				Route: &routers.Route{
-					Swagger:   swagger,
+					Spec:      spec,
 					Path:      req.URL.Path,
 					PathItem:  pathItem,
 					Method:    req.Method,
@@ -119,7 +119,7 @@ func New(swagger *openapi3.Swagger, config ...Config) echo.MiddlewareFunc {
 	}
 }
 
-func getRoute(ctx echo.Context, swagger *openapi3.Swagger) *openapi3.PathItem {
+func getRoute(ctx echo.Context, spec *openapi3.T) *openapi3.PathItem {
 	// Path is in the cache?
 	if pathItem := pathItems.get(ctx.Path()); pathItem != nil {
 		return pathItem
@@ -142,7 +142,7 @@ func getRoute(ctx echo.Context, swagger *openapi3.Swagger) *openapi3.PathItem {
 		apiPath = strings.Replace(apiPath, ":"+name, "{"+name+"}", 1)
 	}
 
-	item, exists := swagger.Paths[apiPath]
+	item, exists := spec.Paths[apiPath]
 	if exists {
 		// path is good, cache it!
 		pathItems.put(ctx.Path(), item)
